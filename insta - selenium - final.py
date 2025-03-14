@@ -1,4 +1,5 @@
 import urllib.parse
+import os
 from seleniumbase import Driver
 import requests
 from selenium.webdriver.support.ui import WebDriverWait
@@ -112,35 +113,31 @@ try:
         print("Button is not visible.")
 except Exception as e:
     print(f"An error occurred: {e}")
+# Create directory if it doesn't exist
+save_dir = "downloaded_pics"
+os.makedirs(save_dir, exist_ok=True)
+
+while True:
+    image_element = driver.find_elements(By.TAG_NAME, "img")[1]
+    # Extract the image URL
+    image_url = image_element.get_attribute("src")
+    timestamp = int(time.time())  # Get current timestamp
+    filename = f"image_{timestamp}.jpg"
+    save_path = os.path.join(save_dir, filename)
+    # Download and save the image
+    img_data = requests.get(image_url).content
+    with open(save_path, "wb") as file:
+        file.write(img_data)
+    try:
+        ###########
+        #Not working
+        next_button = driver.find_element(By.XPATH, "//svg[@aria-label='Next']")
+        next_button.click()
+        #############
+    except:
+        break
+
 
 time.sleep(100)
 
-# Set up the directory to save downloaded files
-directory = Path("downloaded_pics")
-directory.mkdir(exist_ok=True)
-'''
-try:
-    while True:
-        wait = WebDriverWait(driver, 10)
-        next_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@role='button']//svg[@aria-label='Next']")))
-        next_button.click()
-except Exception as E:
-    print(E)
-
-'''
-
-
-
-'''
-image_elements = driver.find_elements(By.XPATH, "//img[contains(@class, 'y-yJ5') or contains(@class, 'FFVAD')]")
-# Download the image
-if image_elements:
-    image_url = image_elements[0].get_attribute("src")
-    image_data = requests.get(image_url).content
-    with open(directory / "instagram_story_image.jpg", "wb") as handler:
-        handler.write(image_data)
-    print("Image downloaded successfully.")
-else:
-    print("No image found in the story.")
-time.sleep(1000)
-'''
+driver.quit()
