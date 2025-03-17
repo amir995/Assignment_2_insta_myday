@@ -1,5 +1,7 @@
 import urllib.parse
 import os
+import json
+from bs4 import BeautifulSoup
 from seleniumbase import Driver
 import requests
 from selenium.webdriver.support.ui import WebDriverWait
@@ -16,6 +18,42 @@ from pathlib import Path
 import undetected_chromedriver as uc
 import pickle
 
+##############
+def download_images(urls, folder="downloaded_pics"):
+    os.makedirs(folder, exist_ok=True)  # Create folder if it doesn't exist
+
+    for i, url in enumerate(urls):
+        try:
+            response = requests.get(url, stream=True)
+            if response.status_code == 200:
+                file_path = os.path.join(folder, f"image_{i}.jpg")
+                with open(file_path, "wb") as file:
+                    for chunk in response.iter_content(1024):
+                        file.write(chunk)
+                print(f"Downloaded: {file_path}")
+            else:
+                print(f"Failed: {url}")
+        except Exception as e:
+            print(f"Error downloading {url}: {e}")
+
+
+def extract_image_urls(data):
+    urls = []
+
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if key == "candidates" and isinstance(value, list):
+                urls.extend([img.get("url") for img in value if "url" in img])
+            else:
+                urls.extend(extract_image_urls(value))
+
+    elif isinstance(data, list):
+        for item in data:
+            urls.extend(extract_image_urls(item))
+
+    return urls
+
+##############
 
 directory = Path("downloaded_files")
 driver_path = ChromeDriverManager().install()
@@ -87,7 +125,7 @@ https://www.instagram.com/stories/natgeo/
 https://www.instagram.com/stories/sports_gallery01/3583753311409488862/
 '''
 
-url = "https://www.instagram.com/stories/sports_gallery01/3583753311409488862/"
+url = "https://www.instagram.com/stories/natgeo/"
 driver.get(url)
 driver.maximize_window()
 time.sleep(2)
@@ -113,31 +151,32 @@ try:
         print("Button is not visible.")
 except Exception as e:
     print(f"An error occurred: {e}")
-# Create directory if it doesn't exist
-save_dir = "downloaded_pics"
-os.makedirs(save_dir, exist_ok=True)
-
-while True:
-    image_element = driver.find_elements(By.TAG_NAME, "img")[1]
-    # Extract the image URL
-    image_url = image_element.get_attribute("src")
-    timestamp = int(time.time())  # Get current timestamp
-    filename = f"image_{timestamp}.jpg"
-    save_path = os.path.join(save_dir, filename)
-    # Download and save the image
-    img_data = requests.get(image_url).content
-    with open(save_path, "wb") as file:
-        file.write(img_data)
-    try:
-        ###########
-        #Not working
-        next_button = driver.find_element(By.XPATH, "//svg[@aria-label='Next']")
-        next_button.click()
-        #############
-    except:
-        break
 
 
-time.sleep(100)
 
-driver.quit()
+
+burp0_url = url
+burp0_cookies = {"csrftoken": "PNMfxlURgcvsj0vZ3wcBar", "datr": "nWqxZzYYoi7X-_I4JpqPvuRu", "ig_did": "07FF5ECB-216D-4A96-9E3F-32F5B49B2DE2", "mid": "Z7FqnQALAAFtBcx2gjGWDu7uAIR8", "ig_nrcb": "1", "ds_user_id": "57049808672", "dpr": "1", "sessionid": "57049808672%3A4d4cMjOqHq2LdN%3A10%3AAYfDw9dKCoDFN4l19irCQdFMWQSBru5mkJ--CX7_jg", "wd": "1729x408", "rur": "\"CCO\\05457049808672\\0541773656904:01f73a76122455818d272aed4880a9ead0c1bd949746cd28245af064954a91b4ee4265c8\""}
+burp0_headers = {"Cache-Control": "max-age=0", "Upgrade-Insecure-Requests": "1", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.127 Safari/537.36", "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7", "Sec-Fetch-Site": "same-origin", "Sec-Fetch-Mode": "navigate", "Sec-Fetch-User": "?1", "Sec-Fetch-Dest": "document", "Dpr": "2", "Viewport-Width": "1729", "Sec-Ch-Ua": "\"Not/A)Brand\";v=\"8\", \"Chromium\";v=\"126\"", "Sec-Ch-Ua-Mobile": "?0", "Sec-Ch-Ua-Platform": "\"macOS\"", "Sec-Ch-Ua-Platform-Version": "\"\"", "Sec-Ch-Ua-Model": "\"\"", "Sec-Ch-Ua-Full-Version-List": "", "Sec-Ch-Prefers-Color-Scheme": "light", "Accept-Language": "en-US", "Accept-Encoding": "gzip, deflate", "Priority": "u=0, i"}
+response = requests.get(burp0_url, headers=burp0_headers, cookies=burp0_cookies)
+data = response.text
+if response.status_code == 200:
+    # Parse the page content with BeautifulSoup
+    soup = BeautifulSoup(response.text, 'html.parser')
+
+    # Find the <script> tag with type="application/json"
+    script_tag = soup.find_all('script', {'type': 'application/json'})
+
+    if script_tag:
+        image_urls = []
+
+        for script in script_tag:
+            try:
+                data = json.loads(script.string)
+                image_urls.extend(extract_image_urls(data))  # Reuse the previous function
+            except (json.JSONDecodeError, TypeError):
+                continue  # Skip if JSON is invalid
+
+        print(len(image_urls))
+image_urls_final  = [image_urls[i] for i in range(len(image_urls)) if i % 2 == 0]
+download_images(image_urls_final)
